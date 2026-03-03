@@ -1,20 +1,13 @@
 import express from "express";
 import cors from "cors";
-import dotenv from "dotenv";
-import pool from "./config/db.js";
-
-dotenv.config();
+import beneficiarioRoutes from "./routes/beneficiario.routes.js";
 
 const app = express();
-const PORT = process.env.PORT || 3000;
-
 app.use(cors());
 app.use(express.json());
 
-app.get("/", (req, res) => {
-  res.send("¡API Scout en TypeScript funcionando!");
-});
+// Agregamos el prefijo /api para que sea profesional
+app.use("/api/beneficiarios", beneficiarioRoutes);
 
-app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en http://localhost:${PORT}`);
-});
+const PORT = 3000;
+app.listen(PORT, () => console.log(`🚀 API Scout en puerto ${PORT}`));
