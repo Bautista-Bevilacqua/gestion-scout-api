@@ -8,6 +8,14 @@ export const getAll = async (): Promise<Beneficiario[]> => {
   return rows;
 };
 
+export const getById = async (id: number): Promise<Beneficiario | null> => {
+  const { rows } = await pool.query(
+    "SELECT * FROM beneficiarios WHERE id_beneficiario = $1",
+    [id],
+  );
+  return rows.length ? rows[0] : null;
+};
+
 export const create = async (data: Beneficiario): Promise<Beneficiario> => {
   const { id_familia, nombre, apellido, dni, fecha_nacimiento, rama_actual } =
     data;
