@@ -3,10 +3,12 @@ import * as familiaController from "../controllers/familia.controller.js";
 
 const router = Router();
 
-router.get("/", familiaController.getFamilias);
-router.get("/:id", familiaController.getFamiliaById);
-router.post("/", familiaController.postFamilia);
-router.put("/:id", familiaController.putFamilia);
-router.delete("/:id", familiaController.deleteFamilia);
+import { verificarToken } from "../middlewares/auth.middleware.js";
+
+router.get("/", verificarToken, familiaController.getFamilias);
+router.get("/:id", verificarToken, familiaController.getFamiliaById);
+router.post("/", verificarToken, familiaController.postFamilia);
+router.put("/:id", verificarToken, familiaController.putFamilia);
+router.delete("/:id", verificarToken, familiaController.deleteFamilia);
 
 export default router;

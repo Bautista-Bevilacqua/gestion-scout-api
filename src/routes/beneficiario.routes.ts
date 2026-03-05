@@ -7,12 +7,14 @@ import {
   deleteBeneficiario,
 } from "../controllers/beneficiario.controller.js";
 
+import { verificarToken } from "../middlewares/auth.middleware.js";
+
 const router = Router();
 
-router.get("/", getBeneficiarios);
-router.get("/:id", getBeneficiarioById);
-router.post("/", postBeneficiario);
-router.put("/:id", putBeneficiario);
-router.delete("/:id", deleteBeneficiario);
+router.get("/", verificarToken, getBeneficiarios);
+router.get("/:id", verificarToken, getBeneficiarioById);
+router.post("/", verificarToken, postBeneficiario);
+router.put("/:id", verificarToken, putBeneficiario);
+router.delete("/:id", verificarToken, deleteBeneficiario);
 
 export default router;
