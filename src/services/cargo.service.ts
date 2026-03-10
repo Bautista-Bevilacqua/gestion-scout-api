@@ -27,14 +27,18 @@ export const registrarPago = async (
   idUsuarioCobrador: number,
   metodoPago: string,
 ) => {
-  const client = await pool.connect(); // Usamos un cliente específico para la transacción
+  const client = await pool.connect();
 
   try {
-    await client.query("BEGIN"); // Arranca la operación segura
+    await client.query("BEGIN");
 
-    // 1. Verificamos cuánto debe y si ya está pagado (para evitar cobros dobles)
+    // 1. Buscamos el cargo CON los datos del beneficiario y concepto (para la caja)
     const { rows: cargo } = await client.query(
-      "SELECT monto_final, estado FROM cargos WHERE id_cargo = $1",
+      `SELECT c.monto_final, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido
+       FROM cargos c
+       JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
+       JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
+       WHERE c.id_cargo = $1`,
       [idCargo],
     );
 
@@ -44,26 +48,36 @@ export const registrarPago = async (
 
     const monto = cargo[0].monto_final;
 
-    // 2. Actualizamos el estado de la deuda a PAGADO
+    // 2. Actualizamos estado
     await client.query(
       "UPDATE cargos SET estado = 'PAGADO' WHERE id_cargo = $1",
       [idCargo],
     );
 
-    // 3. Insertamos el recibo en la tabla de pagos
+    // 3. Insertamos el pago y recuperamos el ID
     const { rows: nuevoPago } = await client.query(
       `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) 
-       VALUES ($1, $2, $3, $4) RETURNING *`,
+       VALUES ($1, $2, $3, $4) RETURNING id_pago`,
       [idCargo, monto, metodoPago, idUsuarioCobrador],
     );
 
-    await client.query("COMMIT"); // ¡Si todo salió bien, guardamos los cambios!
-    return nuevoPago[0];
+    const idPago = nuevoPago[0].id_pago;
+
+    // 4. ✨ Lo mandamos a la caja como INGRESO
+    const detalleMovimiento = `Cobro: ${cargo[0].concepto_nombre} - ${cargo[0].nombre} ${cargo[0].apellido}`;
+    await client.query(
+      `INSERT INTO movimientos_caja (tipo, monto, concepto, id_usuario, id_pago)
+       VALUES ('INGRESO', $1, $2, $3, $4)`,
+      [monto, detalleMovimiento, idUsuarioCobrador, idPago],
+    );
+
+    await client.query("COMMIT");
+    return { mensaje: "Pago registrado y enviado a caja", id_pago: idPago };
   } catch (error) {
-    await client.query("ROLLBACK"); // Si algo falló, deshacemos todo
+    await client.query("ROLLBACK");
     throw error;
   } finally {
-    client.release(); // Devolvemos la conexión
+    client.release();
   }
 };
 
@@ -97,38 +111,52 @@ export const registrarPagoMultiple = async (
   const client = await pool.connect();
 
   try {
-    await client.query("BEGIN"); // Iniciamos la transacción
+    await client.query("BEGIN"); // Arrancamos la transacción
 
     for (const id of idsCargos) {
-      // 1. Verificamos que el cargo exista y no esté pagado
+      // 1. Buscamos el cargo, pero ahora traemos el nombre del chico y de la cuota para que la caja quede prolija
       const { rows: cargo } = await client.query(
-        "SELECT monto_final, estado FROM cargos WHERE id_cargo = $1",
+        `
+        SELECT c.monto_final, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido
+        FROM cargos c
+        JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
+        JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
+        WHERE c.id_cargo = $1
+      `,
         [id],
       );
 
-      if (cargo.length === 0) continue; // Si no existe, pasamos al siguiente
-      if (cargo[0].estado === "PAGADO") continue; // Si ya está pago, lo salteamos
+      if (cargo.length === 0 || cargo[0].estado === "PAGADO") continue;
 
       const monto = cargo[0].monto_final;
 
-      // 2. Actualizamos el estado del cargo
+      // 2. Marcamos como pagado
       await client.query(
         "UPDATE cargos SET estado = 'PAGADO' WHERE id_cargo = $1",
         [id],
       );
 
-      // 3. Registramos el pago individual en el historial
-      await client.query(
+      const { rows: pagoData } = await client.query(
         `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) 
-         VALUES ($1, $2, $3, $4)`,
+         VALUES ($1, $2, $3, $4) RETURNING id_pago`,
         [id, monto, metodoPago, idUsuarioCobrador],
+      );
+
+      const idPago = pagoData[0].id_pago;
+
+      const detalleMovimiento = `Cobro: ${cargo[0].concepto_nombre} - ${cargo[0].nombre} ${cargo[0].apellido}`;
+
+      await client.query(
+        `INSERT INTO movimientos_caja (tipo, monto, concepto, id_usuario, id_pago)
+         VALUES ('INGRESO', $1, $2, $3, $4)`,
+        [monto, detalleMovimiento, idUsuarioCobrador, idPago],
       );
     }
 
-    await client.query("COMMIT"); // Guardamos todos los cambios de una
-    return { mensaje: "Todos los pagos fueron registrados" };
+    await client.query("COMMIT");
+    return { mensaje: "Todos los pagos fueron registrados y pasados a Caja" };
   } catch (error) {
-    await client.query("ROLLBACK"); // Si algo falló, deshacemos TODO
+    await client.query("ROLLBACK");
     throw error;
   } finally {
     client.release();
