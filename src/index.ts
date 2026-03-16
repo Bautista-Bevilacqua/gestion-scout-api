@@ -7,6 +7,7 @@ import usuariosRoutes from "./routes/usuario.routes.js";
 import conceptosRoutes from "./routes/concepto.routes.js";
 import cargosRoutes from "./routes/cargo.routes.js";
 import cajaRoutes from "./routes/caja.routes.js";
+import legajoRoutes from "./routes/legajo.routes.js";
 
 const app = express();
 app.use(cors());
@@ -20,6 +21,10 @@ app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/conceptos", conceptosRoutes);
 app.use("/api/cargos", cargosRoutes);
 app.use("/api/caja", cajaRoutes);
+
+app.use("/uploads", express.static("uploads"));
+
+app.use("/api/legajos", legajoRoutes);
 
 const PORT = 3000;
 app.listen(PORT, () => console.log(`🚀 API Scout en puerto ${PORT}`));
