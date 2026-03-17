@@ -1,13 +1,13 @@
 import nodemailer from "nodemailer";
 
-// Usamos las variables de entorno que vas a configurar en Render
 const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
+  service: "gmail",
   auth: {
+    type: "OAuth2",
     user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASS,
+    clientId: process.env.OAUTH_CLIENT_ID,
+    clientSecret: process.env.OAUTH_CLIENT_SECRET,
+    refreshToken: process.env.OAUTH_REFRESH_TOKEN,
   },
 });
 
@@ -17,25 +17,21 @@ export const enviarMailBienvenida = async (
   passwordProvisoria: string,
 ) => {
   const mailOptions = {
-    from: '"Sistema Scout 108" <tu_correo_del_grupo@gmail.com>', // Podés poner process.env.EMAIL_USER acá también
+    from: `"Sistema Scout 108" <${process.env.EMAIL_USER}>`,
     to: emailDestino,
     subject: "¡Bienvenido al Sistema de Gestión Scout!",
     html: `
-      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-        <h2 style="color: #005A9C;">¡Siempre Listo, ${nombre}!</h2>
-        <p>Tu cuenta como Dirigente en el sistema del Grupo 108 ha sido creada.</p>
-        <p>Tus credenciales de acceso temporal son:</p>
-        <ul>
-          <li><strong>Email:</strong> ${emailDestino}</li>
-          <li><strong>Contraseña provisoria:</strong> <span style="background: #eee; padding: 4px 8px; font-family: monospace;">${passwordProvisoria}</span></li>
-        </ul>
-        <p>Por seguridad, el sistema te pedirá que cambies esta contraseña la primera vez que ingreses.</p>
-        <br>
-        <p>Un abrazo scout,</p>
-        <p><strong>El Equipo de Administración</strong></p>
+      <div style="font-family: Arial, sans-serif; border: 1px solid #ddd; padding: 20px; border-radius: 10px;">
+        <h2 style="color: #2c3e50;">¡Siempre Listo, ${nombre}!</h2>
+        <p>Se ha creado tu cuenta como dirigente para el <b>Grupo Scout 108</b>.</p>
+        <p>Tus credenciales de acceso son:</p>
+        <p><b>Usuario:</b> ${emailDestino}</p>
+        <p><b>Contraseña temporal:</b> <span style="background-color: #f1f1f1; padding: 5px; font-family: monospace;">${passwordProvisoria}</span></p>
+        <hr>
+        <p style="font-size: 12px; color: #7f8c8d;">Por favor, cambia tu contraseña al ingresar por primera vez.</p>
       </div>
     `,
   };
 
-  await transporter.sendMail(mailOptions);
+  return await transporter.sendMail(mailOptions);
 };
