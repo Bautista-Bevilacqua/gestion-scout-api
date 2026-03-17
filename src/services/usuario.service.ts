@@ -19,16 +19,16 @@ export const crearDirigente = async (data: any) => {
 
     // 👇 EL SALVAVIDAS: Intentamos mandar el mail, pero si falla, no rompemos todo
     try {
-      // Le sacamos el "await" para que se mande de fondo (fire-and-forget)
-      // y responda al frontend al instante sin esperar a Gmail.
-      enviarMailBienvenida(email, nombre, passwordProvisoria).catch((err) => {
-        console.error(
-          "⚠️ Usuario creado, pero Gmail rechazó el envío del correo:",
-          err,
-        );
-      });
+      // VOLVEMOS AL AWAIT: Es preferible que el frontend tarde 1 segundo más
+      // a que el mail nunca llegue.
+      await enviarMailBienvenida(email, nombre, passwordProvisoria);
+      console.log("✅ Proceso de mail completado.");
     } catch (mailError) {
-      console.error("⚠️ Error al intentar conectar con el servicio de correo");
+      // Si falla el mail, el usuario ya se creó en la DB, así que solo logueamos
+      console.error(
+        "⚠️ Usuario creado, pero falló el envío del mail:",
+        mailError,
+      );
     }
 
     return rows[0];

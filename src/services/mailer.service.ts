@@ -6,23 +6,32 @@ export const enviarMailBienvenida = async (
   nombre: string,
   passwordProvisoria: string,
 ) => {
-  // Si por alguna razón la variable no carga en el scope global, la llamamos acá
+  console.log("1. Intentando iniciar envío a:", emailDestino);
+
+  if (!process.env.RESEND_API_KEY) {
+    console.error(
+      "ERROR: La API Key de Resend no está cargada en las variables de entorno.",
+    );
+    return;
+  }
+
   const resend = new Resend(process.env.RESEND_API_KEY);
 
   try {
-    const { data, error } = await resend.emails.send({
-      from: "Sistema Scout <onboarding@resend.dev>",
+    console.log("2. Llamando a Resend API...");
+    const response = await resend.emails.send({
+      from: "onboarding@resend.dev",
       to: emailDestino,
       subject: "¡Bienvenido al Sistema Scout!",
-      html: `<strong>Hola ${nombre}</strong>, tu contraseña provisoria es: ${passwordProvisoria}`,
+      html: `<strong>Hola ${nombre}</strong>, tu contraseña es: ${passwordProvisoria}`,
     });
 
-    if (error) {
-      return console.error("Error de Resend:", error);
+    if (response.error) {
+      console.error("3. Resend devolvió un error:", response.error);
+    } else {
+      console.log("3. ¡Éxito! ID del mail:", response.data?.id);
     }
-
-    console.log("Email enviado con ID:", data?.id);
   } catch (err) {
-    console.error("Error inesperado:", err);
+    console.error("4. Error crítico atrapado en el catch:", err);
   }
 };
