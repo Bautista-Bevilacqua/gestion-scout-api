@@ -1,37 +1,47 @@
-import { Resend } from "resend";
-
-// Opción recomendada: inicializarlo así para evitar el error de "Missing API key" en el arranque
 export const enviarMailBienvenida = async (
   emailDestino: string,
   nombre: string,
   passwordProvisoria: string,
 ) => {
-  console.log("1. Intentando iniciar envío a:", emailDestino);
+  console.log("1. Iniciando envío via API directa de Brevo...");
 
-  if (!process.env.RESEND_API_KEY) {
-    console.error(
-      "ERROR: La API Key de Resend no está cargada en las variables de entorno.",
-    );
-    return;
-  }
+  const url = "https://api.brevo.com/v3/smtp/email";
 
-  const resend = new Resend(process.env.RESEND_API_KEY);
+  const options = {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": process.env.BREVO_API_KEY as string,
+    },
+    body: JSON.stringify({
+      sender: {
+        name: "Sistema Scout 108",
+        email: "bautistabevilacqua@gmail.com", // CAMBIÁ ESTO por el mail que validaste en Brevo
+      },
+      to: [{ email: emailDestino, name: nombre }],
+      subject: "¡Bienvenido al Sistema Scout!",
+      htmlContent: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee;">
+          <h2 style="color: #2e7d32;">¡Siempre Listo, ${nombre}!</h2>
+          <p>Tu cuenta ha sido creada con éxito en el Sistema Scout 108.</p>
+          <p>Tu contraseña provisoria es: <b style="background: #f4f4f4; padding: 5px;">${passwordProvisoria}</b></p>
+          <hr>
+          <p style="font-size: 12px; color: #666;">Por favor, cambiá tu clave al ingresar por primera vez.</p>
+        </div>`,
+    }),
+  };
 
   try {
-    console.log("2. Llamando a Resend API...");
-    const response = await resend.emails.send({
-      from: "onboarding@resend.dev",
-      to: emailDestino,
-      subject: "¡Bienvenido al Sistema Scout!",
-      html: `<strong>Hola ${nombre}</strong>, tu contraseña es: ${passwordProvisoria}`,
-    });
+    const response = await fetch(url, options);
+    const result = await response.json();
 
-    if (response.error) {
-      console.error("3. Resend devolvió un error:", response.error);
+    if (response.ok) {
+      console.log("✅ ¡Éxito! Mail enviado. ID:", result.messageId);
     } else {
-      console.log("3. ¡Éxito! ID del mail:", response.data?.id);
+      console.error("❌ Brevo rechazó el mail:", result);
     }
-  } catch (err) {
-    console.error("4. Error crítico atrapado en el catch:", err);
+  } catch (error) {
+    console.error("❌ Error de red al conectar con Brevo:", error);
   }
 };
