@@ -72,3 +72,30 @@ export const getByFamilia = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const obtenerHistorial = async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const historial = await beneficiarioService.getHistorial(id);
+    res.json(historial);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const crearRegistroHistorial = async (req: any, res: Response) => {
+  try {
+    const idBeneficiario = Number(req.params.id);
+    const { descripcion } = req.body;
+    const idUsuario = req.usuario.id;
+
+    const nuevoRegistro = await beneficiarioService.agregarRegistroHistorial(
+      idBeneficiario,
+      descripcion,
+      idUsuario,
+    );
+    res.status(201).json(nuevoRegistro);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};

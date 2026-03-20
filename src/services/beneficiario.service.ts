@@ -98,3 +98,28 @@ export const getPorFamilia = async (idFamilia: number) => {
   const { rows } = await pool.query(query, [idFamilia]);
   return rows;
 };
+
+export const getHistorial = async (idBeneficiario: number) => {
+  const query = `
+    SELECT h.*, u.nombre as dirigente_nombre, u.apellido as dirigente_apellido
+    FROM historial_beneficiarios h
+    LEFT JOIN usuarios u ON h.id_usuario = u.id_usuario
+    WHERE h.id_beneficiario = $1
+    ORDER BY h.fecha DESC
+  `;
+  const { rows } = await pool.query(query, [idBeneficiario]);
+  return rows;
+};
+
+export const agregarRegistroHistorial = async (
+  idBeneficiario: number,
+  descripcion: string,
+  idUsuario: number,
+) => {
+  const { rows } = await pool.query(
+    `INSERT INTO historial_beneficiarios (id_beneficiario, descripcion, id_usuario) 
+     VALUES ($1, $2, $3) RETURNING *`,
+    [idBeneficiario, descripcion, idUsuario],
+  );
+  return rows[0];
+};
