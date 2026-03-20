@@ -1,6 +1,5 @@
 import pool from "../config/db.js";
 
-// 1. TRAER LA CUENTA CORRIENTE DE UN BENEFICIARIO
 export const getCargosPorBeneficiario = async (idBeneficiario: number) => {
   const query = `
     SELECT 
@@ -21,7 +20,6 @@ export const getCargosPorBeneficiario = async (idBeneficiario: number) => {
   return rows;
 };
 
-// 2. REGISTRAR UN PAGO (Con Transacción Segura)
 export const registrarPago = async (
   idCargo: number,
   idUsuarioCobrador: number,
@@ -32,7 +30,6 @@ export const registrarPago = async (
   try {
     await client.query("BEGIN");
 
-    // 1. Buscamos el cargo CON los datos del beneficiario y concepto (para la caja)
     const { rows: cargo } = await client.query(
       `SELECT c.monto_final, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido
        FROM cargos c
@@ -48,13 +45,11 @@ export const registrarPago = async (
 
     const monto = cargo[0].monto_final;
 
-    // 2. Actualizamos estado
     await client.query(
       "UPDATE cargos SET estado = 'PAGADO' WHERE id_cargo = $1",
       [idCargo],
     );
 
-    // 3. Insertamos el pago y recuperamos el ID
     const { rows: nuevoPago } = await client.query(
       `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) 
        VALUES ($1, $2, $3, $4) RETURNING id_pago`,
@@ -63,7 +58,6 @@ export const registrarPago = async (
 
     const idPago = nuevoPago[0].id_pago;
 
-    // 4. ✨ Lo mandamos a la caja como INGRESO
     const detalleMovimiento = `Cobro: ${cargo[0].concepto_nombre} - ${cargo[0].nombre} ${cargo[0].apellido}`;
     await client.query(
       `INSERT INTO movimientos_caja (tipo, monto, concepto, id_usuario, id_pago)
@@ -85,7 +79,6 @@ export const crearCargoIndividual = async (
   idBeneficiario: number,
   idConcepto: number,
 ) => {
-  // 1. Buscamos el monto del concepto para copiarlo al cargo
   const { rows: concepto } = await pool.query(
     "SELECT monto_base FROM conceptos_cobro WHERE id_concepto = $1",
     [idConcepto],
@@ -93,7 +86,6 @@ export const crearCargoIndividual = async (
 
   if (concepto.length === 0) throw new Error("Concepto no encontrado");
 
-  // 2. Creamos la deuda (cargo)
   const { rows } = await pool.query(
     `INSERT INTO cargos (id_beneficiario, id_concepto, monto_final, estado) 
      VALUES ($1, $2, $3, 'PENDIENTE') RETURNING *`,
@@ -111,10 +103,9 @@ export const registrarPagoMultiple = async (
   const client = await pool.connect();
 
   try {
-    await client.query("BEGIN"); // Arrancamos la transacción
+    await client.query("BEGIN");
 
     for (const id of idsCargos) {
-      // 1. Buscamos el cargo, pero ahora traemos el nombre del chico y de la cuota para que la caja quede prolija
       const { rows: cargo } = await client.query(
         `
         SELECT c.monto_final, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido
@@ -130,7 +121,6 @@ export const registrarPagoMultiple = async (
 
       const monto = cargo[0].monto_final;
 
-      // 2. Marcamos como pagado
       await client.query(
         "UPDATE cargos SET estado = 'PAGADO' WHERE id_cargo = $1",
         [id],
