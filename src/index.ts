@@ -8,6 +8,7 @@ import conceptosRoutes from "./routes/concepto.routes.js";
 import cargosRoutes from "./routes/cargo.routes.js";
 import cajaRoutes from "./routes/caja.routes.js";
 import legajoRoutes from "./routes/legajo.routes.js";
+import eventoRoutes from "./routes/evento.routes.js";
 
 const app = express();
 app.use(cors());
@@ -21,6 +22,7 @@ app.use("/api/usuarios", usuariosRoutes);
 app.use("/api/conceptos", conceptosRoutes);
 app.use("/api/cargos", cargosRoutes);
 app.use("/api/caja", cajaRoutes);
+app.use("/api/eventos", eventoRoutes);
 
 app.use("api/uploads", express.static("uploads"));
 
