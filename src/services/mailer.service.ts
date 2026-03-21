@@ -1,40 +1,110 @@
-import nodemailer from "nodemailer";
-
-// Configuramos el "cartero" usando Gmail.
-// OJO: Vas a necesitar crear una "Contraseña de Aplicación" en tu cuenta de Google para que esto funcione.
-const transporter = nodemailer.createTransport({
-  service: "gmail",
-  auth: {
-    user: "bautistabevilacqua@gmail.com", // Cambiá esto
-    pass: "psrp izrb hgys bich", // No es tu clave normal, es una generada por Google
-  },
-});
-
 export const enviarMailBienvenida = async (
   emailDestino: string,
   nombre: string,
   passwordProvisoria: string,
 ) => {
-  const mailOptions = {
-    from: '"Sistema Scout 108" <tu_correo_del_grupo@gmail.com>',
-    to: emailDestino,
-    subject: "¡Bienvenido al Sistema de Gestión Scout!",
-    html: `
-      <div style="font-family: Arial, sans-serif; padding: 20px; color: #333;">
-        <h2 style="color: #005A9C;">¡Siempre Listo, ${nombre}!</h2>
-        <p>Tu cuenta como Dirigente en el sistema del Grupo 108 ha sido creada.</p>
-        <p>Tus credenciales de acceso temporal son:</p>
-        <ul>
-          <li><strong>Email:</strong> ${emailDestino}</li>
-          <li><strong>Contraseña provisoria:</strong> <span style="background: #eee; padding: 4px 8px; font-family: monospace;">${passwordProvisoria}</span></li>
-        </ul>
-        <p>Por seguridad, el sistema te pedirá que cambies esta contraseña la primera vez que ingreses.</p>
-        <br>
-        <p>Un abrazo scout,</p>
-        <p><strong>El Equipo de Administración</strong></p>
-      </div>
-    `,
+  console.log("1. Iniciando envío via API directa de Brevo...");
+
+  const url = "https://api.brevo.com/v3/smtp/email";
+
+  const options = {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": process.env.BREVO_API_KEY as string,
+    },
+    body: JSON.stringify({
+      sender: {
+        name: "Sistema Scout 108",
+        email: "bautistabevilacqua@gmail.com",
+      },
+      to: [{ email: emailDestino, name: nombre }],
+      subject: "¡Bienvenido al Sistema Scout!",
+      htmlContent: `
+        <div style="font-family: sans-serif; padding: 20px; border: 1px solid #eee;">
+          <h2 style="color: #2e7d32;">¡Siempre Listo, ${nombre}!</h2>
+          <p>Tu cuenta ha sido creada con éxito en el Sistema Scout 108.</p>
+          <p>Ingresa a <a href="https://grupo108.vercel.app/" target="_blank">https://grupo108.vercel.app/</a> utilizando tu correo electrónico y la contraseña provisoria.</p>
+          <p>Tu contraseña provisoria es: <b style="background: #f4f4f4; padding: 5px;">${passwordProvisoria}</b></p>
+          <hr>
+          <p style="font-size: 12px; color: #666;">Por favor, cambiá tu clave al ingresar por primera vez.</p>
+        </div>`,
+    }),
   };
 
-  await transporter.sendMail(mailOptions);
+  try {
+    const response = await fetch(url, options);
+    const result = await response.json();
+
+    if (response.ok) {
+      console.log("✅ ¡Éxito! Mail enviado. ID:", result.messageId);
+    } else {
+      console.error("❌ Brevo rechazó el mail:", result);
+    }
+  } catch (error) {
+    console.error("❌ Error de red al conectar con Brevo:", error);
+  }
+};
+
+export const enviarMailRecibo = async (
+  emailDestino: string,
+  nombreFamilia: string,
+  nombreBeneficiario: string,
+  montoTotal: number,
+  detallePagos: string,
+  metodoPago: string,
+) => {
+  console.log("1. Iniciando envío de recibo via Brevo...");
+
+  const url = "https://api.brevo.com/v3/smtp/email";
+  const options = {
+    method: "POST",
+    headers: {
+      accept: "application/json",
+      "content-type": "application/json",
+      "api-key": process.env.BREVO_API_KEY as string,
+    },
+    body: JSON.stringify({
+      sender: {
+        name: "Tesorería - Grupo Scout 108",
+        email: "bautistabevilacqua@gmail.com",
+      },
+      to: [{ email: emailDestino, name: nombreFamilia }],
+      subject: "🧾 Recibo de Pago - Grupo Scout 108",
+      htmlContent: `
+        <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e5e7eb; border-radius: 8px;">
+          <h2 style="color: #2563eb; text-align: center;">¡Pago Recibido!</h2>
+          <p>Hola, Familia <strong>${nombreFamilia}</strong>:</p>
+          <p>Hemos registrado correctamente un pago en la cuenta de <strong>${nombreBeneficiario}</strong>. ¡Muchas gracias por mantener la cuota al día!</p>
+          
+          <div style="background-color: #f3f4f6; padding: 15px; border-radius: 6px; margin: 20px 0;">
+            <h3 style="margin-top: 0; color: #374151;">Detalle del comprobante:</h3>
+            <ul style="color: #4b5563;">
+              <li><strong>Conceptos abonados:</strong> ${detallePagos}</li>
+              <li><strong>Medio de pago:</strong> ${metodoPago}</li>
+              <li><strong>Fecha:</strong> ${new Date().toLocaleDateString("es-AR")}</li>
+            </ul>
+            <h2 style="margin-bottom: 0; color: #111827; text-align: right;">Total pagado: $${montoTotal}</h2>
+          </div>
+          
+          <p style="font-size: 13px; color: #6b7280; text-align: center;">
+            Este es un comprobante automático generado por el Sistema de Gestión del Grupo 108.<br>
+            ¡Siempre Listos! ⚜️
+          </p>
+        </div>`,
+    }),
+  };
+
+  try {
+    const response = await fetch(url, options);
+    const result = await response.json();
+    if (response.ok) {
+      console.log("✅ Recibo enviado. ID:", result.messageId);
+    } else {
+      console.error("❌ Error en Brevo (Recibo):", result);
+    }
+  } catch (error) {
+    console.error("❌ Error de red con Brevo:", error);
+  }
 };

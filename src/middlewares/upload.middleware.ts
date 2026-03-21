@@ -1,21 +1,22 @@
 import multer from "multer";
-import path from "path";
-import fs from "fs"; // <-- Importamos el File System nativo de Node
+import { v2 as cloudinary } from "cloudinary";
+import { CloudinaryStorage } from "multer-storage-cloudinary";
 
-const uploadDir = "uploads/";
-
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
-
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadDir);
-  },
-  filename: (req, file, cb) => {
-    const uniqueSuffix = Date.now() + "-" + Math.round(Math.random() * 1e9);
-    cb(null, uniqueSuffix + path.extname(file.originalname));
-  },
+cloudinary.config({
+  cloud_name: process.env.CLOUDINARY_CLOUD_NAME || "TU_CLOUD_NAME",
+  api_key: process.env.CLOUDINARY_API_KEY || "TU_API_KEY",
+  api_secret: process.env.CLOUDINARY_API_SECRET || "TU_API_SECRET",
 });
 
-export const upload = multer({ storage });
+const storage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    return {
+      folder: "sistema-scout-legajos",
+      allowed_formats: ["jpg", "png", "pdf", "jpeg"],
+      // ESTA LÍNEA ES LA QUE TE ARREGLA EL PROBLEMA DEL CELULAR:
+      resource_type: "auto",
+    };
+  },
+});
+export const upload = multer({ storage: storage });

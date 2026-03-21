@@ -1,7 +1,6 @@
 import { Request, Response } from "express";
-import fs from "fs";
-import path from "path";
 import * as legajoService from "../services/legajo.service.js";
+import { v2 as cloudinary } from "cloudinary";
 
 export const getDocumentos = async (req: Request, res: Response) => {
   try {
@@ -18,7 +17,7 @@ export const getDocumentos = async (req: Request, res: Response) => {
 export const subirDocumento = async (req: Request, res: Response) => {
   try {
     const { idBeneficiario } = req.params;
-    const file = req.file; // Esto lo genera Multer
+    const file = req.file as any;
 
     if (!file) {
       return res.status(400).json({ message: "No se envió ningún archivo" });
@@ -27,7 +26,7 @@ export const subirDocumento = async (req: Request, res: Response) => {
     const nuevoDoc = await legajoService.guardarDocumento(
       Number(idBeneficiario),
       file.originalname,
-      file.filename,
+      file.path,
       file.mimetype,
     );
 
@@ -41,21 +40,12 @@ export const borrarDocumento = async (req: Request, res: Response) => {
   try {
     const { idDocumento } = req.params;
 
-    // 1. Lo borramos de la base de datos
     const docEliminado = await legajoService.eliminarDocumento(
       Number(idDocumento),
     );
 
     if (!docEliminado) {
       return res.status(404).json({ message: "Documento no encontrado" });
-    }
-
-    // 2. Lo borramos físicamente de la carpeta uploads/
-    const rutaArchivo = path.resolve("uploads", docEliminado.nombre_archivo);
-
-    // Verificamos si el archivo existe antes de intentar borrarlo
-    if (fs.existsSync(rutaArchivo)) {
-      fs.unlinkSync(rutaArchivo);
     }
 
     res.json({ message: "Documento eliminado correctamente" });

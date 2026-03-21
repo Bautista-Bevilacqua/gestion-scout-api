@@ -2,16 +2,12 @@ import pool from "../config/db.js";
 import bcrypt from "bcrypt";
 import { enviarMailBienvenida } from "./mailer.service.js";
 
-// Genera una clave aleatoria de 8 caracteres (ej: "a7b9x2pz")
 const generarPasswordRandom = () => Math.random().toString(36).slice(-8);
 
 export const crearDirigente = async (data: any) => {
   const { nombre, apellido, dni, email, rol } = data;
 
-  // 1. Generamos la provisoria
   const passwordProvisoria = generarPasswordRandom();
-
-  // 2. La encriptamos para guardarla en la BD
   const passwordEncriptada = await bcrypt.hash(passwordProvisoria, 10);
 
   try {
@@ -21,8 +17,19 @@ export const crearDirigente = async (data: any) => {
       [nombre, apellido, dni, email, passwordEncriptada, rol],
     );
 
-    // 3. Si se guardó bien, mandamos el mail CON LA CLAVE SIN ENCRIPTAR para que la lea
-    await enviarMailBienvenida(email, nombre, passwordProvisoria);
+    // 👇 EL SALVAVIDAS: Intentamos mandar el mail, pero si falla, no rompemos todo
+    try {
+      // VOLVEMOS AL AWAIT: Es preferible que el frontend tarde 1 segundo más
+      // a que el mail nunca llegue.
+      await enviarMailBienvenida(email, nombre, passwordProvisoria);
+      console.log("✅ Proceso de mail completado.");
+    } catch (mailError) {
+      // Si falla el mail, el usuario ya se creó en la DB, así que solo logueamos
+      console.error(
+        "⚠️ Usuario creado, pero falló el envío del mail:",
+        mailError,
+      );
+    }
 
     return rows[0];
   } catch (error: any) {
