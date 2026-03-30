@@ -84,12 +84,12 @@ export const getPorFamilia = async (idFamilia: number) => {
       b.apellido, 
       b.rama_actual,
       b.id_familia,
-      -- Sumamos solo lo que está PENDIENTE para este beneficiario
+      -- Cambiamos monto_final por monto_efectivo (o el que uses de base)
       (
-        SELECT COALESCE(SUM(monto_final), 0) 
-        FROM cargos 
-        WHERE id_beneficiario = b.id_beneficiario 
-        AND estado = 'PENDIENTE'
+        SELECT COALESCE(SUM(c.monto_efectivo), 0) 
+        FROM cargos c
+        WHERE c.id_beneficiario = b.id_beneficiario 
+        AND c.estado = 'PENDIENTE'
       ) as deuda_total
     FROM beneficiarios b
     WHERE b.id_familia = $1
@@ -98,7 +98,6 @@ export const getPorFamilia = async (idFamilia: number) => {
   const { rows } = await pool.query(query, [idFamilia]);
   return rows;
 };
-
 export const getHistorial = async (idBeneficiario: number) => {
   const query = `
     SELECT h.*, u.nombre as dirigente_nombre, u.apellido as dirigente_apellido
