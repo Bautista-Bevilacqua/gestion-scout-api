@@ -6,6 +6,9 @@ import {
   asignar,
   getDisponibles,
   createMasivo,
+  actualizarPrecio,
+  archivarPagados,
+  archivarIndividual,
 } from "../controllers/concepto.controller.js";
 import { verificarToken } from "../middlewares/auth.middleware.js";
 
@@ -18,5 +21,7 @@ router.post("/:id/asignar", verificarToken, asignar); // <-- NUEVA RUTA
 router.get("/disponibles/:idBeneficiario", verificarToken, getDisponibles);
 router.post("/masivo", verificarToken, createMasivo);
 router.delete("/:id", verificarToken, remove);
-
+router.put("/actualizar-precio/:id", verificarToken, actualizarPrecio);
+router.put("/archivar-pagados", verificarToken, archivarPagados);
+router.put("/:id/archivar", verificarToken, archivarIndividual);
 export default router;

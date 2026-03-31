@@ -30,12 +30,18 @@ export const createIndividual = async (req: Request, res: Response) => {
 export const pagar = async (req: AuthRequest, res: Response) => {
   try {
     const idCargo = Number(req.params.idCargo);
-    const { metodoPago } = req.body;
+    // AHORA RECIBIMOS montoAbonado
+    const { metodoPago, montoAbonado } = req.body;
     const idUsuarioCobrador = req.usuario.id;
 
-    // Cambiamos el SELECT para traer ambos montos
+    if (!montoAbonado) {
+      return res
+        .status(400)
+        .json({ message: "Debe ingresar un monto a pagar" });
+    }
+
     const { rows: datosMail } = await pool.query(
-      `SELECT c.monto_efectivo, c.monto_transferencia, co.nombre as concepto_nombre, b.nombre as nombre_beneficiario, 
+      `SELECT co.nombre as concepto_nombre, b.nombre as nombre_beneficiario, 
               f.apellido_familia, f.email as email_familia
        FROM cargos c
        JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
@@ -45,25 +51,22 @@ export const pagar = async (req: AuthRequest, res: Response) => {
       [idCargo],
     );
 
+    // Le pasamos el montoAbonado al servicio
     const pago = await cargoService.registrarPago(
       idCargo,
       idUsuarioCobrador,
       metodoPago || "EFECTIVO",
+      Number(montoAbonado),
     );
 
     try {
       if (datosMail.length > 0 && datosMail[0].email_familia) {
-        // Elegimos qué monto mandarle en el mail
-        const montoFinalAbonado =
-          metodoPago === "EFECTIVO"
-            ? datosMail[0].monto_efectivo
-            : datosMail[0].monto_transferencia;
-
+        // En el mail enviamos lo que ABONÓ realmente, no el costo total
         enviarMailRecibo(
           datosMail[0].email_familia,
           datosMail[0].apellido_familia,
           datosMail[0].nombre_beneficiario,
-          montoFinalAbonado,
+          Number(montoAbonado),
           datosMail[0].concepto_nombre,
           metodoPago || "EFECTIVO",
         );
@@ -72,7 +75,7 @@ export const pagar = async (req: AuthRequest, res: Response) => {
       console.error("Error al enviar recibo individual:", mailError);
     }
 
-    res.json({ mensaje: "Pago registrado con éxito", pago });
+    res.json({ mensaje: pago.mensaje, estado: pago.estado_actual });
   } catch (error: any) {
     res.status(400).json({ message: error.message });
   }
@@ -87,10 +90,11 @@ export const pagarMultiples = async (req: any, res: Response) => {
       return res.status(400).json({ message: "Se requiere un array de IDs" });
     }
 
-    // Cambiamos el SELECT
+    // Para el cobro múltiple (el carrito), traemos los cargos para saber cuánto DEBÍA de cada uno
     const { rows: datosMail } = await pool.query(
       `SELECT c.monto_efectivo, c.monto_transferencia, co.nombre as concepto_nombre, b.nombre as nombre_beneficiario, 
-              f.apellido_familia, f.email as email_familia
+              f.apellido_familia, f.email as email_familia,
+              COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = c.id_cargo), 0) as total_pagado
        FROM cargos c
        JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
        JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
@@ -107,13 +111,13 @@ export const pagarMultiples = async (req: any, res: Response) => {
 
     try {
       if (datosMail.length > 0 && datosMail[0].email_familia) {
-        // Sumamos el total dependiendo de cómo pagaron
-        const montoTotal = datosMail.reduce((acc, curr) => {
-          const precio =
+        const montoTotalCobrado = datosMail.reduce((acc, curr) => {
+          const precioObjetivo =
             metodoPago === "EFECTIVO"
               ? curr.monto_efectivo
               : curr.monto_transferencia;
-          return acc + Number(precio);
+          const aPagar = Number(precioObjetivo) - Number(curr.total_pagado);
+          return acc + (aPagar > 0 ? aPagar : 0);
         }, 0);
 
         const detallePagos = datosMail.map((d) => d.concepto_nombre).join(", ");
@@ -122,7 +126,7 @@ export const pagarMultiples = async (req: any, res: Response) => {
           datosMail[0].email_familia,
           datosMail[0].apellido_familia,
           datosMail[0].nombre_beneficiario,
-          montoTotal,
+          montoTotalCobrado,
           detallePagos,
           metodoPago || "EFECTIVO",
         );
@@ -134,5 +138,15 @@ export const pagarMultiples = async (req: any, res: Response) => {
     res.json({ mensaje: "Cobro múltiple realizado con éxito" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
+  }
+};
+
+export const removeCargo = async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.idCargo);
+    await cargoService.eliminarCargo(id);
+    res.json({ mensaje: "Deuda desasociada correctamente" });
+  } catch (error: any) {
+    res.status(400).json({ message: error.message });
   }
 };
