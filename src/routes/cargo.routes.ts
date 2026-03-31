@@ -4,6 +4,7 @@ import {
   getByBeneficiario,
   pagar,
   pagarMultiples,
+  removeCargo,
 } from "../controllers/cargo.controller.js";
 import { verificarToken } from "../middlewares/auth.middleware.js";
 
@@ -17,5 +18,6 @@ router.post("/pagar-multiples", verificarToken, pagarMultiples);
 
 // Para cobrar una deuda: POST /api/cargos/12/pagar
 router.post("/:idCargo/pagar", verificarToken, pagar);
+router.delete("/:idCargo", verificarToken, removeCargo);
 
 export default router;
