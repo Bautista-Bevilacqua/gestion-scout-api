@@ -1,10 +1,19 @@
 import pool from "../config/db.js";
 import { Beneficiario } from "../models/beneficiario.model.js";
 
-export const getAll = async (): Promise<Beneficiario[]> => {
+export const getAll = async (rolUsuario: string): Promise<Beneficiario[]> => {
+  if (["ADMIN", "JEFE_GRUPO", "ADMINISTRACION"].includes(rolUsuario)) {
+    const { rows } = await pool.query(
+      "SELECT * FROM beneficiarios ORDER BY apellido ASC",
+    );
+    return rows;
+  }
+
   const { rows } = await pool.query(
-    "SELECT * FROM beneficiarios ORDER BY apellido ASC",
+    "SELECT * FROM beneficiarios WHERE UPPER(rama_actual) = $1 ORDER BY apellido ASC",
+    [rolUsuario.toUpperCase()],
   );
+
   return rows;
 };
 

@@ -3,7 +3,16 @@ import * as beneficiarioService from "../services/beneficiario.service.js";
 
 export const getBeneficiarios = async (req: Request, res: Response) => {
   try {
-    const data = await beneficiarioService.getAll();
+    const rolUsuario = (req as any).usuario?.rol;
+
+    if (!rolUsuario) {
+      return res
+        .status(401)
+        .json({ message: "No se pudo identificar el rol del usuario" });
+    }
+
+    const data = await beneficiarioService.getAll(rolUsuario);
+
     res.json(data);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
