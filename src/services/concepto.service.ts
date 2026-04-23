@@ -182,48 +182,6 @@ export const crearCuotasMasivas = async (data: any) => {
       conceptosCreados.push(rows[0]);
     }
 
-    // --- ACTUALIZACIÓN DE PRECIOS VIEJOS AL VALOR DE HOY ---
-
-    // 2. Buscamos el precio de la cuota que está vigente HOY (la que vence más pronto pero no venció aún)
-    const { rows: cuotaVigente } = await client.query(
-      `SELECT monto_efectivo, monto_transferencia 
-       FROM conceptos_cobro 
-       WHERE nombre ILIKE 'Cuota%' 
-         AND fecha_vencimiento >= CURRENT_DATE 
-       ORDER BY fecha_vencimiento ASC 
-       LIMIT 1`,
-    );
-
-    // 3. Si existe una cuota vigente, actualizamos todo lo vencido a ESE precio
-    if (cuotaVigente.length > 0) {
-      const {
-        monto_efectivo: precioHoy,
-        monto_transferencia: precioTransfHoy,
-      } = cuotaVigente[0];
-
-      // Actualizar cargos pendientes de cuotas vencidas (LE SACAMOS EL INTERVALO ACÁ)
-      await client.query(
-        `UPDATE cargos 
-         SET monto_efectivo = $1, monto_transferencia = $2
-         WHERE estado != 'PAGADO' 
-           AND id_concepto IN (
-             SELECT id_concepto FROM conceptos_cobro 
-             WHERE fecha_vencimiento < CURRENT_DATE 
-               AND nombre ILIKE 'Cuota%'
-           )`,
-        [precioHoy, precioTransfHoy],
-      );
-
-      // Actualizar conceptos base vencidos (Y LE SACAMOS EL INTERVALO ACÁ TAMBIÉN)
-      await client.query(
-        `UPDATE conceptos_cobro 
-         SET monto_efectivo = $1, monto_transferencia = $2
-         WHERE fecha_vencimiento < CURRENT_DATE 
-           AND nombre ILIKE 'Cuota%'`,
-        [precioHoy, precioTransfHoy],
-      );
-    }
-
     await client.query("COMMIT");
     return conceptosCreados;
   } catch (error) {
