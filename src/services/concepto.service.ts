@@ -205,9 +205,10 @@ export const actualizarPrecioConcepto = async (data: any) => {
   try {
     await client.query("BEGIN");
 
+    // Si el tesorero lo hace manual, también le ponemos actualizada = TRUE
     const { rows: concepto } = await client.query(
       `UPDATE conceptos_cobro 
-       SET monto_efectivo = $1, monto_transferencia = $2, fecha_vencimiento = $3
+       SET monto_efectivo = $1, monto_transferencia = $2, fecha_vencimiento = $3, actualizada = TRUE
        WHERE id_concepto = $4 RETURNING *`,
       [monto_efectivo, monto_transferencia, fecha_vencimiento, id_concepto],
     );
@@ -237,9 +238,11 @@ export const sincronizarPreciosAutomaticamente = async () => {
   try {
     await client.query("BEGIN");
 
-    // 1. Buscamos cuál es el precio de HOY
+    console.log("🔍 [CRON] Buscando cuál es la cuota vigente...");
+
+    // 1. Buscamos el precio y el VENCIMIENTO de la cuota actual
     const { rows: cuotaVigente } = await client.query(
-      `SELECT monto_efectivo, monto_transferencia 
+      `SELECT monto_efectivo, monto_transferencia, fecha_vencimiento 
        FROM conceptos_cobro 
        WHERE nombre ILIKE 'Cuota%' 
          AND fecha_vencimiento >= CURRENT_DATE 
@@ -251,10 +254,15 @@ export const sincronizarPreciosAutomaticamente = async () => {
       const {
         monto_efectivo: precioHoy,
         monto_transferencia: precioTransfHoy,
+        fecha_vencimiento: vencimientoHoy,
       } = cuotaVigente[0];
 
-      // 2. Actualizamos deudas vencidas
-      await client.query(
+      console.log(
+        `✅ [CRON] Cuota vigente encontrada. Aplicando precio de $${precioHoy} y pateando vencimiento al ${vencimientoHoy}`,
+      );
+
+      // 2. Actualizamos la deuda de los chicos
+      const resultadoCargos = await client.query(
         `UPDATE cargos 
          SET monto_efectivo = $1, monto_transferencia = $2
          WHERE estado != 'PAGADO' 
@@ -266,13 +274,24 @@ export const sincronizarPreciosAutomaticamente = async () => {
         [precioHoy, precioTransfHoy],
       );
 
-      // 3. Actualizamos conceptos vencidos
-      await client.query(
+      // 3. Actualizamos los conceptos vencidos (Plata + Nueva Fecha + Actualizada)
+      const resultadoConceptos = await client.query(
         `UPDATE conceptos_cobro 
-         SET monto_efectivo = $1, monto_transferencia = $2
-         WHERE fecha_vencimiento < CURRENT_DATE 
+         SET monto_efectivo = $1, monto_transferencia = $2, fecha_vencimiento = $3, actualizada = TRUE
+         WHERE fecha_vencimiento < CURRENT_DATE
            AND nombre ILIKE 'Cuota%'`,
-        [precioHoy, precioTransfHoy],
+        [precioHoy, precioTransfHoy, vencimientoHoy],
+      );
+
+      console.log(
+        `📊 [CRON] Se actualizaron ${resultadoConceptos.rowCount} conceptos vencidos.`,
+      );
+      console.log(
+        `📊 [CRON] Se actualizaron ${resultadoCargos.rowCount} deudas pendientes.`,
+      );
+    } else {
+      console.log(
+        "⚠️ [CRON] No hay cuotas futuras registradas. No se aplicaron actualizaciones.",
       );
     }
 
