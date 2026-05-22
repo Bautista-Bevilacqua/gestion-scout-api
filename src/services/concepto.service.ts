@@ -59,6 +59,24 @@ export const archivarConceptoIndividual = async (id: number) => {
   }
 };
 
+// TRAER CONCEPTOS ARCHIVADOS (PAPELERA)
+export const getConceptosArchivados = async () => {
+  const { rows } = await pool.query(
+    "SELECT * FROM conceptos_cobro WHERE archivado = TRUE ORDER BY fecha_creacion DESC",
+  );
+  return rows;
+};
+
+// RECUPERAR UN CONCEPTO ARCHIVADO
+export const recuperarConcepto = async (id: number) => {
+  const { rows } = await pool.query(
+    "UPDATE conceptos_cobro SET archivado = FALSE WHERE id_concepto = $1 RETURNING *",
+    [id],
+  );
+  if (rows.length === 0) throw new Error("Concepto no encontrado");
+  return rows[0];
+};
+
 // CREAR UN NUEVO CONCEPTO
 export const crearConcepto = async (data: any) => {
   const {
@@ -201,8 +219,10 @@ export const crearCuotasMasivas = async (data: any) => {
 export const actualizarPrecioConcepto = async (data: any) => {
   const {
     id_concepto,
+    nombre,
     monto_efectivo,
     monto_transferencia,
+    alcance, // Sumamos el alcance
     fecha_vencimiento,
   } = data;
   const client = await pool.connect();
@@ -210,16 +230,24 @@ export const actualizarPrecioConcepto = async (data: any) => {
   try {
     await client.query("BEGIN");
 
-    // Si el tesorero lo hace manual, también le ponemos actualizada = TRUE
+    // Actualizamos TODOS los campos en la base de datos
     const { rows: concepto } = await client.query(
       `UPDATE conceptos_cobro 
-       SET monto_efectivo = $1, monto_transferencia = $2, fecha_vencimiento = $3, actualizada = TRUE
-       WHERE id_concepto = $4 RETURNING *`,
-      [monto_efectivo, monto_transferencia, fecha_vencimiento, id_concepto],
+       SET nombre = $1, monto_efectivo = $2, monto_transferencia = $3, alcance = $4, fecha_vencimiento = $5, actualizada = TRUE
+       WHERE id_concepto = $6 RETURNING *`,
+      [
+        nombre,
+        monto_efectivo,
+        monto_transferencia,
+        alcance,
+        fecha_vencimiento || null,
+        id_concepto,
+      ],
     );
 
     if (concepto.length === 0) throw new Error("Concepto no encontrado");
 
+    // Las deudas previas (cargos) solo se actualizan en precio, no les cambiamos el alcance ni el nombre
     await client.query(
       `UPDATE cargos 
        SET monto_efectivo = $1, monto_transferencia = $2

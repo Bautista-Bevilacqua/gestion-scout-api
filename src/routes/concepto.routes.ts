@@ -9,6 +9,8 @@ import {
   actualizarPrecio,
   archivarPagados,
   archivarIndividual,
+  restaurar,
+  getArchivados,
 } from "../controllers/concepto.controller.js";
 import { verificarToken } from "../middlewares/auth.middleware.js";
 
@@ -24,4 +26,6 @@ router.delete("/:id", verificarToken, remove);
 router.put("/actualizar-precio/:id", verificarToken, actualizarPrecio);
 router.put("/archivar-pagados", verificarToken, archivarPagados);
 router.put("/:id/archivar", verificarToken, archivarIndividual);
+router.get("/archivados", getArchivados);
+router.put("/:id/restaurar", restaurar);
 export default router;

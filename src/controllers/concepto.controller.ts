@@ -131,3 +131,22 @@ export const archivarIndividual = async (req: Request, res: Response) => {
     res.status(500).json({ error: error.message });
   }
 };
+
+export const getArchivados = async (req: Request, res: Response) => {
+  try {
+    const conceptos = await conceptoService.getConceptosArchivados();
+    res.json(conceptos);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
+export const restaurar = async (req: Request, res: Response) => {
+  try {
+    const id = Number(req.params.id);
+    const concepto = await conceptoService.recuperarConcepto(id);
+    res.json({ mensaje: "Concepto recuperado exitosamente", concepto });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
