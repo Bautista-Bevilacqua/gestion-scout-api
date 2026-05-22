@@ -13,7 +13,28 @@ import cron from "node-cron";
 import { sincronizarPreciosAutomaticamente } from "./services/concepto.service.js";
 
 const app = express();
-app.use(cors());
+
+const origenesPermitidos = [
+  process.env.FRONTEND_URL,
+  process.env.FRONTEND_URL_WWW,
+  "http://localhost:4200",
+];
+
+app.use(
+  cors({
+    origin: function (origin, callback) {
+      if (!origin) return callback(null, true);
+
+      if (origenesPermitidos.indexOf(origin) === -1) {
+        var msg =
+          "La política CORS de este sitio no permite acceso desde el origen especificado.";
+        return callback(new Error(msg), false);
+      }
+      return callback(null, true);
+    },
+    credentials: true,
+  }),
+);
 app.use(express.json());
 
 // Agregamos el prefijo /api para que sea profesional

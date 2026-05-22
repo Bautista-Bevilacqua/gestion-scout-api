@@ -17,7 +17,7 @@ export const enviarMailBienvenida = async (
     body: JSON.stringify({
       sender: {
         name: "Sistema Scout 108",
-        email: "bautistabevilacqua@gmail.com",
+        email: "no-reply@gruposcout108.com.ar",
       },
       to: [{ email: emailDestino, name: nombre }],
       subject: "¡Bienvenido al Sistema Scout!",
@@ -68,7 +68,7 @@ export const enviarMailRecibo = async (
     body: JSON.stringify({
       sender: {
         name: "Tesorería - Grupo Scout 108",
-        email: "bautistabevilacqua@gmail.com",
+        email: "tesoreria@gruposcout108.com.ar",
       },
       to: [{ email: emailDestino, name: nombreFamilia }],
       subject: "🧾 Recibo de Pago - Grupo Scout 108",
