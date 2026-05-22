@@ -11,15 +11,20 @@ export const getConceptos = async () => {
 // ARCHIVAR TODOS LOS CONCEPTOS QUE YA ESTÁN PAGADOS POR TODOS
 export const archivarConceptosPagados = async () => {
   const query = `
-    UPDATE conceptos_cobro
+    UPDATE conceptos_cobro c
     SET archivado = TRUE
     WHERE archivado = FALSE
-      AND id_concepto IN (
-        SELECT id_concepto 
-        FROM cargos 
-        GROUP BY id_concepto 
-        HAVING COUNT(*) > 0 
-           AND SUM(CASE WHEN estado IN ('PENDIENTE', 'PARCIAL') THEN 1 ELSE 0 END) = 0
+      AND (
+        c.id_concepto IN (
+          SELECT id_concepto 
+          FROM cargos 
+          GROUP BY id_concepto 
+          HAVING COUNT(*) > 0 
+             AND SUM(CASE WHEN estado IN ('PENDIENTE', 'PARCIAL') THEN 1 ELSE 0 END) = 0
+        )
+        OR NOT EXISTS (
+          SELECT 1 FROM cargos cg WHERE cg.id_concepto = c.id_concepto
+        )
       )
     RETURNING id_concepto;
   `;
