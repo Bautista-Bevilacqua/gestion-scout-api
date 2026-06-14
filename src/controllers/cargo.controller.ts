@@ -150,3 +150,26 @@ export const removeCargo = async (req: Request, res: Response) => {
     res.status(400).json({ message: error.message });
   }
 };
+
+export const cargarSaldo = async (req: any, res: Response) => {
+  try {
+    // EL ARREGLO ESTÁ ACÁ: Sacamos el ID de la URL
+    const idBeneficiario = Number(req.params.idBeneficiario);
+    const { monto, metodoPago } = req.body;
+    const idUsuario = req.usuario.id;
+
+    if (!monto || monto <= 0) {
+      return res.status(400).json({ message: "Monto inválido" });
+    }
+
+    await cargoService.cargarSaldoAFavor(
+      idBeneficiario,
+      Number(monto),
+      metodoPago || "EFECTIVO",
+      idUsuario,
+    );
+    res.json({ mensaje: "Saldo cargado con éxito" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
