@@ -49,3 +49,20 @@ export const verificarToken = (
     });
   }
 };
+
+export const verificarRol = (rolesPermitidos: string[]) => {
+  return (req: AuthRequest, res: Response, next: NextFunction) => {
+    if (!req.usuario) {
+      return res.status(401).json({ message: "No autorizado" });
+    }
+
+    if (!rolesPermitidos.includes(req.usuario.rol)) {
+      return res.status(403).json({
+        message:
+          "Acceso denegado. No tenés permisos suficientes para realizar esta acción.",
+      });
+    }
+
+    next();
+  };
+};
