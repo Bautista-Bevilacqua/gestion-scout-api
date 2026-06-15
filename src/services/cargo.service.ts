@@ -40,6 +40,7 @@ export const registrarPago = async (
   idUsuarioCobrador: number,
   metodoPago: string,
   montoAbonado: number,
+  usarSaldo: boolean = false,
 ) => {
   const client = await pool.connect();
   try {
@@ -59,30 +60,42 @@ export const registrarPago = async (
     if (cargo[0].estado === "PAGADO")
       throw new Error("Este cargo ya se encuentra pagado");
 
-    // LÓGICA DE BILLETERA VIRTUAL
-    if (metodoPago === "SALDO_A_FAVOR") {
+    const precioObjetivo =
+      metodoPago === "MERCADOPAGO" || metodoPago === "TRANSFERENCIA"
+        ? cargo[0].monto_transferencia
+        : cargo[0].monto_efectivo;
+
+    let montoSaldoUsado = 0;
+    let montoFisicoUsado = montoAbonado;
+
+    // LÓGICA DE PAGO DIVIDIDO
+    if (usarSaldo || metodoPago === "SALDO_A_FAVOR") {
       const { rows: ben } = await client.query(
         "SELECT saldo_a_favor FROM beneficiarios WHERE id_beneficiario = $1 FOR UPDATE",
         [cargo[0].id_beneficiario],
       );
-      if (Number(ben[0].saldo_a_favor) < montoAbonado) {
-        throw new Error(
-          "El beneficiario no tiene suficiente saldo a favor en su billetera.",
+      let saldoDisponible = Number(ben[0].saldo_a_favor);
+
+      if (metodoPago === "SALDO_A_FAVOR") {
+        montoSaldoUsado = montoAbonado;
+        montoFisicoUsado = 0;
+        if (saldoDisponible < montoSaldoUsado)
+          throw new Error("Saldo a favor insuficiente.");
+      } else if (usarSaldo && saldoDisponible > 0) {
+        montoSaldoUsado = Math.min(saldoDisponible, montoAbonado);
+        montoFisicoUsado = montoAbonado - montoSaldoUsado;
+      }
+
+      if (montoSaldoUsado > 0) {
+        await client.query(
+          "UPDATE beneficiarios SET saldo_a_favor = saldo_a_favor - $1 WHERE id_beneficiario = $2",
+          [montoSaldoUsado, cargo[0].id_beneficiario],
         );
       }
-      // Le restamos la plata de su billetera virtual
-      await client.query(
-        "UPDATE beneficiarios SET saldo_a_favor = saldo_a_favor - $1 WHERE id_beneficiario = $2",
-        [montoAbonado, cargo[0].id_beneficiario],
-      );
     }
 
-    const precioObjetivo =
-      metodoPago === "EFECTIVO" || metodoPago === "SALDO_A_FAVOR"
-        ? cargo[0].monto_efectivo
-        : cargo[0].monto_transferencia;
     const nuevoTotalPagado =
-      Number(cargo[0].total_pagado) + Number(montoAbonado);
+      Number(cargo[0].total_pagado) + montoSaldoUsado + montoFisicoUsado;
     const nuevoEstado =
       nuevoTotalPagado >= precioObjetivo ? "PAGADO" : "PARCIAL";
 
@@ -91,18 +104,26 @@ export const registrarPago = async (
       idCargo,
     ]);
 
-    const { rows: nuevoPago } = await client.query(
-      `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) VALUES ($1, $2, $3, $4) RETURNING id_pago`,
-      [idCargo, montoAbonado, metodoPago, idUsuarioCobrador],
-    );
+    // 1. Registramos la parte pagada con la billetera virtual (No toca la caja)
+    if (montoSaldoUsado > 0) {
+      await client.query(
+        `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) VALUES ($1, $2, 'SALDO_A_FAVOR', $3)`,
+        [idCargo, montoSaldoUsado, idUsuarioCobrador],
+      );
+    }
 
-    // 🔴 LA MAGIA CONTABLE: Si pagan con saldo a favor, salteamos el INSERT de la caja
-    if (metodoPago !== "SALDO_A_FAVOR") {
+    // 2. Registramos la parte pagada con método físico (Sí toca la caja)
+    if (montoFisicoUsado > 0) {
+      const { rows: nuevoPago } = await client.query(
+        `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) VALUES ($1, $2, $3, $4) RETURNING id_pago`,
+        [idCargo, montoFisicoUsado, metodoPago, idUsuarioCobrador],
+      );
+
       const detalleMovimiento = `Cobro ${nuevoEstado === "PARCIAL" ? "Parcial" : "Total"}: ${cargo[0].concepto_nombre} - ${cargo[0].nombre} ${cargo[0].apellido}`;
       await client.query(
         `INSERT INTO movimientos_caja (tipo, monto, concepto, id_usuario, id_pago) VALUES ('INGRESO', $1, $2, $3, $4)`,
         [
-          montoAbonado,
+          montoFisicoUsado,
           detalleMovimiento,
           idUsuarioCobrador,
           nuevoPago[0].id_pago,
@@ -114,7 +135,6 @@ export const registrarPago = async (
     return {
       mensaje: `Pago ${nuevoEstado} registrado`,
       estado_actual: nuevoEstado,
-      id_pago: nuevoPago[0].id_pago,
     };
   } catch (error) {
     await client.query("ROLLBACK");
@@ -153,16 +173,16 @@ export const registrarPagoMultiple = async (
   idsCargos: number[],
   idUsuarioCobrador: number,
   metodoPago: string,
+  usarSaldo: boolean = false,
 ) => {
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
 
-    // Lógica Saldo a Favor Global
     let saldoDisponible = 0;
     let idBeneficiarioCompartido = null;
 
-    if (metodoPago === "SALDO_A_FAVOR") {
+    if (usarSaldo || metodoPago === "SALDO_A_FAVOR") {
       const { rows: testCargo } = await client.query(
         "SELECT id_beneficiario FROM cargos WHERE id_cargo = $1",
         [idsCargos[0]],
@@ -179,9 +199,7 @@ export const registrarPagoMultiple = async (
       const { rows: cargo } = await client.query(
         `SELECT c.monto_efectivo, c.monto_transferencia, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido,
           COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = $1), 0) as total_pagado
-         FROM cargos c
-         JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
-         JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
+         FROM cargos c JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
          WHERE c.id_cargo = $1`,
         [id],
       );
@@ -189,22 +207,51 @@ export const registrarPagoMultiple = async (
       if (cargo.length === 0 || cargo[0].estado === "PAGADO") continue;
 
       const precioObjetivo =
-        metodoPago === "EFECTIVO" || metodoPago === "SALDO_A_FAVOR"
-          ? cargo[0].monto_efectivo
-          : cargo[0].monto_transferencia;
-      const montoAFavor =
-        Number(precioObjetivo) - Number(cargo[0].total_pagado);
+        metodoPago === "TRANSFERENCIA" || metodoPago === "MERCADOPAGO"
+          ? cargo[0].monto_transferencia
+          : cargo[0].monto_efectivo;
+      const aPagar = Number(precioObjetivo) - Number(cargo[0].total_pagado);
 
-      if (montoAFavor > 0) {
+      if (aPagar > 0) {
+        let montoSaldo = 0;
+        let montoFisico = aPagar;
+
         if (metodoPago === "SALDO_A_FAVOR") {
-          if (saldoDisponible < montoAFavor)
-            throw new Error(
-              "Saldo a favor insuficiente para cubrir todo el carrito.",
-            );
-          saldoDisponible -= montoAFavor;
+          if (saldoDisponible < aPagar)
+            throw new Error("Saldo a favor insuficiente.");
+          montoSaldo = aPagar;
+          montoFisico = 0;
+        } else if (usarSaldo && saldoDisponible > 0) {
+          montoSaldo = Math.min(saldoDisponible, aPagar);
+          montoFisico = aPagar - montoSaldo;
+        }
+
+        if (montoSaldo > 0) {
+          saldoDisponible -= montoSaldo;
           await client.query(
             "UPDATE beneficiarios SET saldo_a_favor = saldo_a_favor - $1 WHERE id_beneficiario = $2",
-            [montoAFavor, idBeneficiarioCompartido],
+            [montoSaldo, idBeneficiarioCompartido],
+          );
+          await client.query(
+            `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) VALUES ($1, $2, 'SALDO_A_FAVOR', $3)`,
+            [id, montoSaldo, idUsuarioCobrador],
+          );
+        }
+
+        if (montoFisico > 0) {
+          const { rows: pagoData } = await client.query(
+            `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) VALUES ($1, $2, $3, $4) RETURNING id_pago`,
+            [id, montoFisico, metodoPago, idUsuarioCobrador],
+          );
+          const detalleMovimiento = `Cobro: ${cargo[0].concepto_nombre} - ${cargo[0].nombre} ${cargo[0].apellido}`;
+          await client.query(
+            `INSERT INTO movimientos_caja (tipo, monto, concepto, id_usuario, id_pago) VALUES ('INGRESO', $1, $2, $3, $4)`,
+            [
+              montoFisico,
+              detalleMovimiento,
+              idUsuarioCobrador,
+              pagoData[0].id_pago,
+            ],
           );
         }
 
@@ -212,27 +259,8 @@ export const registrarPagoMultiple = async (
           "UPDATE cargos SET estado = 'PAGADO' WHERE id_cargo = $1",
           [id],
         );
-
-        const { rows: pagoData } = await client.query(
-          `INSERT INTO pagos (id_cargo, monto_pagado, metodo_pago, id_usuario_cobrador) VALUES ($1, $2, $3, $4) RETURNING id_pago`,
-          [id, montoAFavor, metodoPago, idUsuarioCobrador],
-        );
-
-        if (metodoPago !== "SALDO_A_FAVOR") {
-          const detalleMovimiento = `Cobro: ${cargo[0].concepto_nombre} - ${cargo[0].nombre} ${cargo[0].apellido}`;
-          await client.query(
-            `INSERT INTO movimientos_caja (tipo, monto, concepto, id_usuario, id_pago) VALUES ('INGRESO', $1, $2, $3, $4)`,
-            [
-              montoAFavor,
-              detalleMovimiento,
-              idUsuarioCobrador,
-              pagoData[0].id_pago,
-            ],
-          );
-        }
       }
     }
-
     await client.query("COMMIT");
     return { mensaje: "Pagos registrados correctamente" };
   } catch (error) {
