@@ -63,7 +63,8 @@ export const pagar = async (req: AuthRequest, res: Response) => {
 
     const { rows: datosMail } = await pool.query(
       `SELECT COALESCE(co.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, b.nombre as nombre_beneficiario,
-              f.apellido_familia, f.email as email_familia
+              f.apellido_familia,
+              CASE WHEN f.contacto_principal = 'MADRE' THEN f.email_madre ELSE f.email_padre END as email_familia
        FROM cargos c
        LEFT JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
        JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
@@ -115,7 +116,8 @@ export const pagarMultiples = async (req: any, res: Response) => {
     // Para el cobro múltiple (el carrito), traemos los cargos para saber cuánto DEBÍA de cada uno
     const { rows: datosMail } = await pool.query(
       `SELECT c.monto_efectivo, c.monto_transferencia, COALESCE(co.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, b.nombre as nombre_beneficiario,
-              f.apellido_familia, f.email as email_familia,
+              f.apellido_familia,
+              CASE WHEN f.contacto_principal = 'MADRE' THEN f.email_madre ELSE f.email_padre END as email_familia,
               COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = c.id_cargo), 0) as total_pagado
        FROM cargos c
        LEFT JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
