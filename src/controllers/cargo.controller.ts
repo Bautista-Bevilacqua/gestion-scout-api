@@ -27,6 +27,27 @@ export const createIndividual = async (req: Request, res: Response) => {
   }
 };
 
+export const createPersonalizado = async (req: Request, res: Response) => {
+  try {
+    const { idBeneficiario, monto, descripcion } = req.body;
+
+    if (!idBeneficiario || !monto || Number(monto) <= 0) {
+      return res
+        .status(400)
+        .json({ message: "Debe indicar beneficiario y un monto válido" });
+    }
+
+    const nuevoCargo = await cargoService.crearCargoPersonalizado(
+      Number(idBeneficiario),
+      Number(monto),
+      descripcion,
+    );
+    res.status(201).json(nuevoCargo);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+};
+
 export const pagar = async (req: AuthRequest, res: Response) => {
   try {
     const idCargo = Number(req.params.idCargo);
@@ -41,10 +62,10 @@ export const pagar = async (req: AuthRequest, res: Response) => {
     }
 
     const { rows: datosMail } = await pool.query(
-      `SELECT co.nombre as concepto_nombre, b.nombre as nombre_beneficiario, 
+      `SELECT COALESCE(co.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, b.nombre as nombre_beneficiario,
               f.apellido_familia, f.email as email_familia
        FROM cargos c
-       JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
+       LEFT JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
        JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
        JOIN familias f ON b.id_familia = f.id_familia
        WHERE c.id_cargo = $1`,
@@ -93,11 +114,11 @@ export const pagarMultiples = async (req: any, res: Response) => {
 
     // Para el cobro múltiple (el carrito), traemos los cargos para saber cuánto DEBÍA de cada uno
     const { rows: datosMail } = await pool.query(
-      `SELECT c.monto_efectivo, c.monto_transferencia, co.nombre as concepto_nombre, b.nombre as nombre_beneficiario, 
+      `SELECT c.monto_efectivo, c.monto_transferencia, COALESCE(co.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, b.nombre as nombre_beneficiario,
               f.apellido_familia, f.email as email_familia,
               COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = c.id_cargo), 0) as total_pagado
        FROM cargos c
-       JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
+       LEFT JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
        JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
        JOIN familias f ON b.id_familia = f.id_familia
        WHERE c.id_cargo = ANY($1::int[])`,
