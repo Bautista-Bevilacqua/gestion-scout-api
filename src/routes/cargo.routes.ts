@@ -2,6 +2,7 @@ import { Router } from "express";
 import {
   cargarSaldo,
   createIndividual,
+  createPersonalizado,
   getByBeneficiario,
   pagar,
   pagarMultiples,
@@ -15,6 +16,7 @@ const router = Router();
 router.get("/beneficiario/:idBeneficiario", verificarToken, getByBeneficiario);
 
 router.post("/individual", verificarToken, createIndividual);
+router.post("/personalizado", verificarToken, createPersonalizado);
 router.post("/pagar-multiples", verificarToken, pagarMultiples);
 
 // Para cobrar una deuda: POST /api/cargos/12/pagar

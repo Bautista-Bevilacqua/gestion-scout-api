@@ -2,11 +2,11 @@ import pool from "../config/db.js";
 
 export const getCargosPorBeneficiario = async (idBeneficiario: number) => {
   const query = `
-    SELECT 
+    SELECT
       c.id_cargo, c.monto_efectivo, c.monto_transferencia, c.estado, c.fecha_creacion as fecha_cargo,
-      con.nombre as concepto_nombre, con.fecha_vencimiento,
+      COALESCE(con.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, con.fecha_vencimiento,
       COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = c.id_cargo), 0) as total_pagado,
-      
+
       -- MAGIA: Agrupamos todos los pagos de este cargo en un Array de JSON
       (
         SELECT COALESCE(json_agg(
@@ -23,9 +23,9 @@ export const getCargosPorBeneficiario = async (idBeneficiario: number) => {
         LEFT JOIN usuarios u ON p.id_usuario_cobrador = u.id_usuario
         WHERE p.id_cargo = c.id_cargo
       ) as historial_pagos
-      
+
     FROM cargos c
-    JOIN conceptos_cobro con ON c.id_concepto = con.id_concepto
+    LEFT JOIN conceptos_cobro con ON c.id_concepto = con.id_concepto
     WHERE c.id_beneficiario = $1
     ORDER BY 
       CASE WHEN c.estado IN ('PENDIENTE', 'PARCIAL') THEN 1 ELSE 2 END,
@@ -47,10 +47,11 @@ export const registrarPago = async (
     await client.query("BEGIN");
 
     const { rows: cargo } = await client.query(
-      `SELECT c.id_beneficiario, c.monto_efectivo, c.monto_transferencia, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido,
+      `SELECT c.id_beneficiario, c.monto_efectivo, c.monto_transferencia, c.estado,
+        COALESCE(co.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, b.nombre, b.apellido,
         COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = $1), 0) as total_pagado
        FROM cargos c
-       JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
+       LEFT JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto
        JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
        WHERE c.id_cargo = $1`,
       [idCargo],
@@ -169,6 +170,20 @@ export const crearCargoIndividual = async (
   return rows[0];
 };
 
+export const crearCargoPersonalizado = async (
+  idBeneficiario: number,
+  monto: number,
+  descripcion?: string,
+) => {
+  const { rows } = await pool.query(
+    `INSERT INTO cargos (id_beneficiario, id_concepto, monto_efectivo, monto_transferencia, descripcion, estado)
+     VALUES ($1, NULL, $2, $2, $3, 'PENDIENTE') RETURNING *`,
+    [idBeneficiario, monto, descripcion || null],
+  );
+
+  return rows[0];
+};
+
 export const registrarPagoMultiple = async (
   idsCargos: number[],
   idUsuarioCobrador: number,
@@ -197,9 +212,10 @@ export const registrarPagoMultiple = async (
 
     for (const id of idsCargos) {
       const { rows: cargo } = await client.query(
-        `SELECT c.monto_efectivo, c.monto_transferencia, c.estado, co.nombre as concepto_nombre, b.nombre, b.apellido,
+        `SELECT c.monto_efectivo, c.monto_transferencia, c.estado,
+          COALESCE(co.nombre, c.descripcion, 'Deuda personalizada') as concepto_nombre, b.nombre, b.apellido,
           COALESCE((SELECT SUM(monto_pagado) FROM pagos WHERE id_cargo = $1), 0) as total_pagado
-         FROM cargos c JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
+         FROM cargos c LEFT JOIN conceptos_cobro co ON c.id_concepto = co.id_concepto JOIN beneficiarios b ON c.id_beneficiario = b.id_beneficiario
          WHERE c.id_cargo = $1`,
         [id],
       );
