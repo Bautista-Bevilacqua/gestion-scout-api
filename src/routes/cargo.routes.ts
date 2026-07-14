@@ -1,5 +1,6 @@
 import { Router } from "express";
 import {
+  cargarSaldo,
   createIndividual,
   getByBeneficiario,
   pagar,
@@ -19,5 +20,10 @@ router.post("/pagar-multiples", verificarToken, pagarMultiples);
 // Para cobrar una deuda: POST /api/cargos/12/pagar
 router.post("/:idCargo/pagar", verificarToken, pagar);
 router.delete("/:idCargo", verificarToken, removeCargo);
+router.post(
+  "/beneficiario/:idBeneficiario/cargar-saldo",
+  verificarToken,
+  cargarSaldo,
+);
 
 export default router;

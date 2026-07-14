@@ -31,7 +31,7 @@ export const pagar = async (req: AuthRequest, res: Response) => {
   try {
     const idCargo = Number(req.params.idCargo);
     // AHORA RECIBIMOS montoAbonado
-    const { metodoPago, montoAbonado } = req.body;
+    const { metodoPago, montoAbonado, usarSaldo } = req.body;
     const idUsuarioCobrador = req.usuario.id;
 
     if (!montoAbonado) {
@@ -57,6 +57,7 @@ export const pagar = async (req: AuthRequest, res: Response) => {
       idUsuarioCobrador,
       metodoPago || "EFECTIVO",
       Number(montoAbonado),
+      usarSaldo,
     );
 
     try {
@@ -83,7 +84,7 @@ export const pagar = async (req: AuthRequest, res: Response) => {
 
 export const pagarMultiples = async (req: any, res: Response) => {
   try {
-    const { ids, metodoPago } = req.body;
+    const { ids, metodoPago, usarSaldo } = req.body;
     const idUsuarioCobrador = req.usuario.id;
 
     if (!ids || !Array.isArray(ids)) {
@@ -107,6 +108,7 @@ export const pagarMultiples = async (req: any, res: Response) => {
       ids,
       idUsuarioCobrador,
       metodoPago || "EFECTIVO",
+      usarSaldo,
     );
 
     try {
@@ -148,5 +150,28 @@ export const removeCargo = async (req: Request, res: Response) => {
     res.json({ mensaje: "Deuda desasociada correctamente" });
   } catch (error: any) {
     res.status(400).json({ message: error.message });
+  }
+};
+
+export const cargarSaldo = async (req: any, res: Response) => {
+  try {
+    // EL ARREGLO ESTÁ ACÁ: Sacamos el ID de la URL
+    const idBeneficiario = Number(req.params.idBeneficiario);
+    const { monto, metodoPago } = req.body;
+    const idUsuario = req.usuario.id;
+
+    if (!monto || monto <= 0) {
+      return res.status(400).json({ message: "Monto inválido" });
+    }
+
+    await cargoService.cargarSaldoAFavor(
+      idBeneficiario,
+      Number(monto),
+      metodoPago || "EFECTIVO",
+      idUsuario,
+    );
+    res.json({ mensaje: "Saldo cargado con éxito" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 };
