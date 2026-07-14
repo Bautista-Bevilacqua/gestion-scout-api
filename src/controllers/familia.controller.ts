@@ -22,12 +22,17 @@ export const getFamiliaById = async (req: Request, res: Response) => {
   }
 };
 
+const esErrorDeValidacion = (mensaje: string) =>
+  mensaje === "La familia debe tener al menos un padre o madre cargado";
+
 export const postFamilia = async (req: Request, res: Response) => {
   try {
     const nueva = await familiaService.create(req.body);
     res.status(201).json(nueva);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res
+      .status(esErrorDeValidacion(error.message) ? 400 : 500)
+      .json({ error: error.message });
   }
 };
 
@@ -41,7 +46,9 @@ export const putFamilia = async (req: Request, res: Response) => {
       return res.status(404).json({ message: "Familia no encontrada" });
     res.json(editada);
   } catch (error: any) {
-    res.status(500).json({ error: error.message });
+    res
+      .status(esErrorDeValidacion(error.message) ? 400 : 500)
+      .json({ error: error.message });
   }
 };
 

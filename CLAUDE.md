@@ -57,7 +57,7 @@ Convención de nombres: `recurso.controller.ts` / `recurso.service.ts` / `recurs
 ## Modelo de datos (inferido de las queries SQL — no hay fuente única de verdad)
 
 - `usuarios` — dirigentes/admins: `id_usuario, nombre, apellido, dni, email, password (bcrypt), rol, debe_cambiar_password, creado_en`. `rol` ∈ `ADMIN | JEFE_GRUPO | ADMINISTRACION | MANADA | UNIDAD | CAMINANTES | ROVERS`.
-- `familias` — `id_familia, apellido_familia, nombre_padre, nombre_madre, telefono_padre, telefono_madre, email, direccion, fecha_creacion`.
+- `familias` — `id_familia, apellido_familia (texto libre, sin formato forzado), tiene_padre, tiene_madre (booleanos, CHECK tiene_padre OR tiene_madre), nombre_padre, nombre_madre, telefono_padre, telefono_madre, email_padre, email_madre (todos NULLABLE, se pisan a NULL server-side si el progenitor correspondiente no está activo), contacto_principal ('PADRE'|'MADRE', CHECK), direccion, fecha_creacion`. Ya no existe columna `email` compartida (se reemplazó por `email_padre`/`email_madre`, ver más abajo).
 - `beneficiarios` (los scouts) — `id_beneficiario, id_familia (FK), nombre, apellido, dni, fecha_nacimiento, rama_actual, fecha_ingreso, saldo_a_favor`.
 - `historial_beneficiarios` — bitácora de novedades: `id_beneficiario, descripcion, id_usuario, fecha`.
 - `conceptos_cobro` — conceptos de cuota: `id_concepto, nombre, monto_efectivo, monto_transferencia, alcance ('GRUPO' o rama), fecha_vencimiento, archivado, actualizada, fecha_creacion`.
@@ -80,6 +80,14 @@ Feature agregada para que un dirigente pueda cargarle una deuda puntual a UN ben
 - `crearCargoPersonalizado(idBeneficiario, monto, descripcion?)` en `cargo.service.ts` inserta un `cargo` con `id_concepto = NULL`, mismo `monto` en `monto_efectivo` y `monto_transferencia` (no hay precio diferenciado por método de pago para estas deudas), y `descripcion` opcional.
 - **Todas** las queries que antes hacían `JOIN conceptos_cobro` sobre `cargos` (listado de cuenta corriente, cobro individual, cobro múltiple, mail de recibo) son ahora `LEFT JOIN`, con `COALESCE(con.nombre, c.descripcion, 'Deuda personalizada')` como nombre a mostrar. Si agregás una query nueva que una `cargos` con `conceptos_cobro`, usá el mismo patrón — un INNER JOIN ahí rompe (o directamente no puede cobrar) cualquier cargo personalizado.
 - No hay endpoint para editar una deuda personalizada ya creada — se borra (`DELETE /api/cargos/:idCargo`, solo si está `PENDIENTE`) y se vuelve a cargar.
+
+### Familias monoparentales y contacto principal
+
+El jefe de grupo pidió sacar el formato forzado "Apellido-Apellido" (asumía padres con apellidos distintos unidos por guion, lo cual no contempla familias con un solo apellido) y permitir familias con un solo progenitor cargado (antes padre y madre eran obligatorios los dos).
+
+- `familia.service.ts` tiene `normalizarProgenitores(data)`: valida que al menos uno de `tiene_padre`/`tiene_madre` sea `true` (si no, tira `Error("La familia debe tener al menos un padre o madre cargado")`, que el controller mapea a 400), y **fuerza a `null`** los campos (`nombre_`, `telefono_`, `email_`) del progenitor que esté desactivado — no confía en lo que mande el cliente. También fuerza `contacto_principal` al único progenitor activo si sólo hay uno.
+- `contacto_principal` decide a qué email van los recibos de pago: en `cargo.controller.ts` (cobro individual y múltiple) el JOIN con `familias` usa `CASE WHEN f.contacto_principal = 'MADRE' THEN f.email_madre ELSE f.email_padre END as email_familia`. Si agregás otro lugar que mande mail a la familia, replicá este patrón (no uses `email_padre` a secas).
+- No hay endpoint separado para esto — va todo por el `POST`/`PUT /api/familias` normal, mandando `tiene_padre`, `tiene_madre`, `contacto_principal` en el body.
 
 ## Autenticación y autorización
 
